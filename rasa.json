@@ -1,0 +1,82 @@
+{
+  "$schema": "https://rasa-os.github.io/schema/rasa.schema.v1.json",
+  "contract_version": "1.3.0",
+  "name": "rasa.module.ingest",
+  "version": "0.1.0",
+  "kind": "module",
+  "aliases": [
+    "module-ingest"
+  ],
+  "description": "Portable human workflow over the kernel's document-ingest, RAG-query, and semantic-memory system (canon SA-029) — sweep files in, list and manage document records, query with citations, remember/recall/forget. The engine lives in the kernel; this module ships the skills, the prompting discipline, and the conventions. The one thing that varies per project — which kernel, which element identity, which paths may be swept — is delegated to a project-owned .claude/ingest-gate.md.",
+  "source": {
+    "repo": "https://github.com/RasaOS/module-ingest",
+    "branch": "main"
+  },
+  "tier": "Pro",
+  "capabilities": [
+    "ingest.document-lifecycle",
+    "ingest.rag-query",
+    "ingest.semantic-memory",
+    "ingest.sweep-batching"
+  ],
+  "permissions": [
+    "fs:read",
+    "network:fetch",
+    "shell:exec"
+  ],
+  "requires": {
+    "parent_kind": [
+      "domain",
+      "orchestrator"
+    ]
+  },
+  "rasa": {
+    "role": "L1-mountable-capability",
+    "shape_pattern": "toolkit",
+    "note": "The human-workflow half of the kernel's DocumentManager (canon SA-029; kernel TASK-233..239). The kernel owns the engine end-to-end: /v1/files staging, /v1/documents ingest + CRUD + query, /v1/memories, per-element vector indexes, embedding selection, and the kmem agent tools (memory_store / memory_search / doc_search) auto-injected into every claude turn. This module deliberately wraps NONE of that in new plumbing — it ships (1) skills that drive the HTTP surface for a human, (2) ingest-rules.md, the prompting spine that tells the model when to reach for doc_search/memory_search and what belongs in memory vs documents, and (3) the ingest-gate adapter seam. The three genuinely per-project concerns — kernel URL, element identity + scopes, and which paths /ingest may sweep (with load-bearing excludes so a sweep never vectorizes secrets) — live in the project-owned .claude/ingest-gate.md. Cross-module references (audit-ledger entries via module.tasks) are SOFT: present-if-mounted, graceful-if-absent."
+  },
+  "element": {
+    "description": "Element-owned ingest files mirrored into the install target's .claude/ per canon ELEMENT_CONTRACT.md §7. Refreshed on Element upgrade. The ingest-gate is NOT here — it is project-owned (see seed.files). There is no project-owned ledger: the kernel's document store IS the record; /docs reads it live.",
+    "files": [
+      {
+        "from": "content/ingest-rules.md",
+        "to": ".claude/ingest-rules.md",
+        "policy": "file-replace",
+        "note": "The portable ingest spine: when to ingest vs read directly, documents-vs-memory boundary, namespace conventions, the instruction to use the injected doc_search/memory_search tools unprompted, error-code handling, caps, and the known operational gotchas (persistence window, empty-field omission, vision-fallback prerequisites, dims_mismatch). Element-owned; refreshed on upgrade. References .claude/ingest-gate.md for kernel URL + element + sweep roots — it hardcodes none of them."
+      },
+      {
+        "from": "content/skills/",
+        "to": ".claude/skills/",
+        "policy": "directory-mirror",
+        "note": "Ingest skills: /ingest (stage + ingest + stream progress, per-file isolation), /docs (list records), /doc (show / delete one record), /doc-query (RAG query with citations), /remember /recall /forget (semantic memory), /reingest (version-bump re-ingest). Element-owned; refreshed on upgrade."
+      },
+      {
+        "from": "content/README.md",
+        "to": "content/README.md",
+        "policy": "opt-in",
+        "note": "Describes what this module ships and how it installs. Fork/author-time doc; not installed into consumer projects."
+      }
+    ]
+  },
+  "seed": {
+    "description": "One-time, project-owned files copied at install only (skip-if-exists), per canon ELEMENT_CONTRACT.md §7. These belong to the consuming project after install and are never overwritten on Element upgrade — the project's ingest-gate adapter.",
+    "files": [
+      {
+        "from": "seed/ingest-gate.md.template",
+        "to": ".claude/ingest-gate.md",
+        "policy": "skip-if-exists",
+        "note": "The per-project ingest adapter — kernel_url, the element identity every call is scoped to, default namespace, memory scope, the roots /ingest may sweep, and the excludes it must refuse (secrets, node_modules, .git — load-bearing: a sweep must never vectorize a .env). Project-owned; the project fills it. Ships with honest defaults + commented examples. Placeholder-free per the documented skip-if-exists policy gap."
+      },
+      {
+        "from": "seed/rasa.lock.json.template",
+        "to": ".claude/rasa.lock.json",
+        "policy": "init-only-with-sha",
+        "note": "Stamped with the Element HEAD commit SHA at init time. Lockfile shape per canon Spec §6 (Connection Contract). When co-installed under a parent that also stamps a lockfile, the parent's is authoritative (single-writer-per-path, Lock L-004); in the kernel pull model each Element gets its own holding folder, so no collision. Substitutes the standard {{ELEMENT_*}} / {{TODAY}} placeholders via bin/init."
+      }
+    ]
+  },
+  "scaffold": {
+    "description": "Empty directories created at init by the declarative installer. Nothing to scaffold — the document store lives in the kernel, not in project files.",
+    "directories": []
+  }
+}

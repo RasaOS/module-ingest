@@ -1,0 +1,100 @@
+# Ingest-Gate
+
+**This file is yours.** `rasa.module.ingest` ships the portable ingest
+workflow (`.claude/ingest-rules.md` + the `/ingest` skill family), but it
+deliberately does not decide the things that vary per project:
+
+1. **Which kernel** the skills talk to,
+2. **Which element identity** every document, memory, and query is
+   scoped to, and
+3. **Which paths `/ingest` may sweep** — and which it must refuse.
+
+This file is where you define them. Every skill in the family reads it
+first; `/ingest` hard-stops on paths matching `excludes` and says so.
+
+---
+
+## Kernel (EDIT THIS)
+
+```
+kernel_url: http://localhost:3001
+# Dev mode: no JWT. If this deployment requires auth, name the header
+# source here (e.g. "auth: bearer from $RASA_TOKEN") — skills must not
+# guess credentials.
+```
+
+## Identity + scopes (EDIT THIS)
+
+```
+element: <this project's element name, e.g. rasa.domain.legal>
+default_namespace: docs
+memory_scope: <project scope, e.g. legal-cases>
+```
+
+- `element` is THE knowledge unit — leave it unset only if you truly
+  want the element-less `global` index.
+- `default_namespace` is where `/ingest` files documents. Invent
+  sub-namespaces freely (`docs.contracts`, `docs.specs`) — `docs*`
+  ranks tier 1 at query time.
+- `memory_scope` is where `/remember` files memories
+  (namespace `memory.<scope>` kernel-side).
+
+## Sweep roots (EDIT THIS)
+
+```
+ingest_roots: <dirs/globs /ingest may sweep, e.g. ./corpus/**>
+```
+
+`/ingest <path>` accepts any explicit file path, but a *sweep* (a
+directory or glob) must fall under these roots. Until you set this, the
+skill treats every directory sweep as out-of-bounds and asks.
+
+## Excludes (EDIT THIS — LOAD-BEARING)
+
+```
+excludes:
+  - .env*
+  - **/*.pem
+  - **/*.key
+  - **/id_rsa*
+  - **/node_modules/**
+  - **/.git/**
+  - **/secrets/**
+```
+
+**A sweep must never vectorize secrets.** Ingested content is queryable
+by anything with element access — an ingested `.env` is a leaked `.env`.
+`/ingest` refuses any path matching these globs, even when named
+explicitly, and reports the refusal. Extend this list; don't trim it
+below the defaults without a reason you'd say out loud.
+
+---
+
+## Examples — delete the ones you don't need
+
+### Legal corpus project
+
+```
+element: rasa.domain.legal
+default_namespace: docs.contracts
+memory_scope: legal-cases
+ingest_roots: ./corpus/**, ./intake/**
+```
+
+### Engineering project (specs + exports)
+
+```
+element: rasa.domain.code
+default_namespace: docs
+memory_scope: engineering-decisions
+ingest_roots: ./docs/**, ./exports/**
+```
+
+---
+
+## Note on co-mounted modules
+
+If `rasa.module.jobs` is mounted, a scheduled corpus re-sweep is a
+natural job — point its `job.toml` at `/ingest <root>` rather than
+duplicating sweep logic. If `rasa.module.tasks` is mounted, record bulk
+ingests/deletions in `tasks/AUDIT.md`.
